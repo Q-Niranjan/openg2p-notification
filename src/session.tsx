@@ -112,6 +112,8 @@ export function InboxSessionProvider({
   const [filter, setFilterState] = useState<NotificationFilter>("all");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const unreadCountRef = useRef(0);
+  unreadCountRef.current = unreadCount;
 
   const controlled = openProp !== undefined;
   const open = controlled ? Boolean(openProp) : uncontrolledOpen;
@@ -307,21 +309,68 @@ export function InboxSessionProvider({
 
   useEffect(() => {
     if (!client) return;
+
+    const mergeLatest = async (): Promise<number> => {
+      try {
+        const listFilter = filter === "all" ? "unread" : filter;
+        const list = await client.list({ limit: PAGE_SIZE, filter: listFilter });
+        let added = 0;
+        setNotifications((prev) => {
+          const incomingById = new Map(
+            list.notifications.map((item) => [item.id, item])
+          );
+          const prevIds = new Set(prev.map((item) => item.id));
+          const newItems = list.notifications.filter(
+            (item) => item.id && !prevIds.has(item.id)
+          );
+          added = newItems.length;
+          if (newItems.length === 0 && incomingById.size === 0) return prev;
+          const updated = prev.map((item) => incomingById.get(item.id) ?? item);
+          const next = [...newItems, ...updated];
+          if (filter !== "all") return next;
+          return next.sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        });
+        if (filter !== "all") setHasMore(list.hasMore);
+        return added;
+      } catch {
+        return 0;
+      }
+    };
+
     const offReceived = client.onReceived((notification) => {
       if (filter === "archived" || filter === "read") return;
       setNotifications((prev) => {
-        if (prev.some((item) => item.id === notification.id)) return prev;
+        if (!notification.id || prev.some((item) => item.id === notification.id)) {
+          return prev;
+        }
         return [notification, ...prev];
       });
     });
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof window.setTimeout> | undefined;
     const offCount = client.onUnreadCount((count) => {
+      const increased = count > unreadCountRef.current;
       setUnreadCount(count);
       void Promise.all([
         client.readCount().then(setReadCount),
         client.archivedCount().then(setArchivedCount),
       ]).catch(() => undefined);
+
+      if (!increased || filter === "archived" || filter === "read") return;
+
+      void mergeLatest().then((added) => {
+        if (cancelled || added > 0) return;
+        retryTimer = window.setTimeout(() => {
+          if (!cancelled) void mergeLatest();
+        }, 300);
+      });
     });
     return () => {
+      cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
       offReceived();
       offCount();
     };

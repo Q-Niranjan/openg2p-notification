@@ -56,6 +56,23 @@ function resolveActionLabel(label?: string): string | undefined {
   return label.trim();
 }
 
+function asBodyText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => asBodyText(item)).filter(Boolean).join("\n");
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (record.content != null) return asBodyText(record.content);
+    if (typeof record.body === "string") return record.body;
+    if (typeof record.message === "string") return record.message;
+  }
+  return "";
+}
+
 /**
  * Parses `_title:...`, `_message:...`, and `_icon_url:...`
  * markers from Novu body templates.
@@ -88,40 +105,48 @@ function parseBodyFields(raw: string): {
   };
 }
 
+type NovuSocketNotification = NovuNotification & {
+  _id?: string;
+  content?: unknown;
+  read?: boolean;
+  archived?: boolean;
+};
+
 export function toNotification(n: NovuNotification): Notification {
-  const data = (n.data ?? {}) as NovuPayload & Record<string, unknown>;
+  const raw = n as NovuSocketNotification;
+  const data = (raw.data ?? {}) as NovuPayload & Record<string, unknown>;
   const payloadNotification = asPayloadNotification(data.notification);
   const payloadAction = asPayloadAction(data.action);
-  const rawBody = n.body ?? "";
+  const rawBody = asBodyText(raw.body ?? raw.content);
   const bodyFields = parseBodyFields(rawBody);
 
   const actor =
     toPerson(data.actor) ??
-    toPerson(n.actor) ??
+    toPerson(raw.actor) ??
     toPerson(data.sender);
-  const subscriber = toPerson(data.subscriber) ?? toPerson(n.to);
+  const subscriber = toPerson(data.subscriber) ?? toPerson(raw.to);
 
   return {
-    id: n.id,
-    type: n.workflow?.identifier ?? n.channelType ?? "in_app",
+    id: raw.id ?? raw._id ?? "",
+    type: raw.workflow?.identifier ?? raw.channelType ?? "in_app",
     title: bodyFields.title ??
-      payloadNotification?.title ?? n.subject ?? "",
+      payloadNotification?.title ?? raw.subject ?? "",
     body: bodyFields.message ?? payloadNotification?.message ?? rawBody,
     data,
-    createdAt: n.createdAt,
-    read: n.isRead,
-    archived: n.isArchived,
+    createdAt: raw.createdAt,
+    read: raw.isRead ?? raw.read ?? false,
+    archived: raw.isArchived ?? raw.archived ?? false,
     url:
       payloadAction?.url ??
-      n.redirect?.url ??
-      n.primaryAction?.redirect?.url,
+      raw.redirect?.url ??
+      raw.primaryAction?.redirect?.url,
     actionLabel: resolveActionLabel(
-      payloadAction?.label ?? n.primaryAction?.label
+      payloadAction?.label ?? raw.primaryAction?.label
     ),
     actor,
     subscriber,
     iconUrl: bodyFields.iconUrl ?? payloadNotification?.iconUrl,
-    avatarUrl: subscriber?.avatar ?? actor?.avatar ?? n.avatar,
+    avatarUrl: subscriber?.avatar ?? actor?.avatar ?? raw.avatar,
   };
 }
 
@@ -198,11 +223,13 @@ export class NovuNotificationService implements NotificationService {
           limit,
           after: options.after,
           archived: false,
+          useCache: false,
         }),
         this.novu.notifications.list({
           limit,
           after: options.archivedAfter,
           archived: true,
+          useCache: false,
         }),
       ]);
       throwIfError(active.error, "list notifications");
@@ -219,6 +246,7 @@ export class NovuNotificationService implements NotificationService {
     const { data, error } = await this.novu.notifications.list({
       limit,
       after: options.after,
+      useCache: false,
       ...listQuery(filter),
     });
     throwIfError(error, "list notifications");
@@ -276,14 +304,26 @@ export class NovuNotificationService implements NotificationService {
   }
 
   onReceived(handler: (notification: Notification) => void): () => void {
-    return this.novu.on("notifications.notification_received", ({ result }) => {
-      handler(toNotification(result));
+    return this.novu.on("notifications.notification_received", (event) => {
+      try {
+        const payload = event?.result ?? event;
+        if (!payload || typeof payload !== "object") return;
+        const notification = toNotification(payload as NovuNotification);
+        if (!notification.id) return;
+        handler(notification);
+      } catch {
+        // Socket payloads can differ from REST. The session falls back to a list merge.
+      }
     });
   }
 
   onUnreadCount(handler: (count: number) => void): () => void {
     return this.novu.on("notifications.unread_count_changed", ({ result }) => {
-      handler(result.total);
+      const count =
+        typeof result === "number"
+          ? result
+          : Number(result?.total ?? 0);
+      handler(Number.isFinite(count) ? count : 0);
     });
   }
 

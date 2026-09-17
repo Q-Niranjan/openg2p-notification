@@ -325,11 +325,8 @@ function InboxPanel({ visible }: { visible: boolean }) {
       role="dialog"
       aria-label={copy.notifications}
     >
-      <span
-        className="pointer-events-none absolute -top-[5px] right-[15px] z-20 hidden h-2.5 w-2.5 rotate-45 rounded-[1.5px] border-l border-t border-black/[0.08] bg-white sm:block"
-        aria-hidden="true"
-      />
-      <div className="flex max-h-[min(70dvh,calc(100dvh-5.5rem))] flex-col overflow-hidden rounded-xl border border-black/[0.06] bg-white shadow-[0_20px_48px_-12px_rgba(15,23,42,0.22)] sm:max-h-none">
+   
+      <div className="relative z-[2] flex max-h-[min(70dvh,calc(100dvh-5.5rem))] flex-col overflow-hidden rounded-xl border border-black/[0.06] bg-white shadow-[0_20px_48px_-12px_rgba(15,23,42,0.22)] sm:max-h-none">
         <div className="bg-white pt-3 sm:pt-4">
           <div className="flex items-center justify-between gap-3 px-4 pb-3 sm:px-5 sm:pb-3.5">
             <h2 className="m-0 min-w-0 text-[16px] font-semibold tracking-tight text-black sm:text-[16.5px]">
