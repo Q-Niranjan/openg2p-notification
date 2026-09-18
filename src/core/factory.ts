@@ -1,4 +1,4 @@
-import type { NotificationConnection } from "./types";
+import type { NotificationConnection } from "../shared/types";
 import type {
   NotificationProvider,
   NotificationService,

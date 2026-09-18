@@ -17,7 +17,7 @@
     "dist"
   ],
   "sideEffects": [
-    "./src/providers/index.ts"
+    "./src/providers/register.ts"
   ],
   "scripts": {
     "build": "tsup",

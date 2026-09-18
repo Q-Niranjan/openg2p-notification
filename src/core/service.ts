@@ -3,7 +3,7 @@ import type {
   NotificationConnection,
   NotificationListOptions,
   NotificationListResult,
-} from "./types";
+} from "../shared/types";
 
 export interface NotificationService {
   list(
@@ -17,6 +17,10 @@ export interface NotificationService {
   archivedCount(): Promise<number>;
 
   markRead(id: string): Promise<void>;
+
+  readAll(): Promise<void>;
+
+  markSeen(ids: string[]): Promise<void>;
 
   archive(id: string): Promise<void>;
 

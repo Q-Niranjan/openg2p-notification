@@ -43,27 +43,7 @@ The browser connects to the provider. OpenG2P backends do not proxy inbox REST o
 | `NotificationService` | Provider-neutral inbox contract |
 | `NovuNotificationService` | Novu adapter (`@novu/js`) |
 
-## Env config
-
-```ts
-import { Inbox, notificationConfigFromEnv } from "@openg2p/notification";
-
-<Inbox
-  config={{
-    ...notificationConfigFromEnv(process.env),
-    subscriberId: user.preferred_username,
-  }}
-/>
-```
-
-| Variable | Maps to |
-|---|---|
-| `NOTIFICATION_PROVIDER` | `provider` (required, e.g. `novu`) |
-| `NOTIFICATION_APPLICATION_IDENTIFIER` | `applicationIdentifier` |
-| `NOTIFICATION_BACKEND_URL` | `backendUrl` |
-| `NOTIFICATION_WEBSOCKET_URL` | `socketUrl` |
-
-`subscriberId` is the current user and is not read from env. Do not render `Inbox` until `provider`, `applicationIdentifier`, and `subscriberId` are all set.
+The host app maps its own env or runtime config into `Inbox` `config`. `subscriberId` is the current user. Do not render `Inbox` until `provider`, `applicationIdentifier`, and `subscriberId` are all set.
 
 ## Usage
 
